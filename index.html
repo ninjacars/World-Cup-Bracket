@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>2026 World Cup Bracket</title>
+<link rel="icon" href="data:," />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#0b1f17" />
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  html, body { margin: 0; background: #0b1f17; -webkit-tap-highlight-color: transparent; }
+  * { -webkit-touch-callout: none; }
+  .display { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.02em; }
+  .body-f { font-family: 'Archivo', sans-serif; }
+  .mono-f { font-family: 'JetBrains Mono', monospace; }
+  ::-webkit-scrollbar { height: 6px; width: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgba(244,241,232,0.2); border-radius: 3px; }
+  #root { min-height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useEffect } = React;
+
+/* ---------- Inline icons (no external icon package needed) ---------- */
+const Icon = ({ d, size = 16, className = "" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {d}
+  </svg>
+);
+const TrophyIcon = (p) => <Icon {...p} d={<>
+  <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+  <path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+  <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+  <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+</>} />;
+const ChevronRightIcon = (p) => <Icon {...p} d={<path d="m9 18 6-6-6-6"/>} />;
+const ResetIcon = (p) => <Icon {...p} d={<>
+  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+</>} />;
+const FlagIcon = (p) => <Icon {...p} d={<>
+  <path d="M4 22V4a1 1 0 0 1 1-1h13.3a1 1 0 0 1 .7 1.7l-4 4 4 4a1 1 0 0 1-.7 1.7H5"/>
+</>} />;
+
+/* ---------- DATA: 2026 World Cup groups, standings as of June 23, 2026 ---------- */
+const GROUPS = {
+  A: { teams: ["Mexico", "South Korea", "Czechia", "South Africa"] },
+  B: { teams: ["Canada", "Switzerland", "Bosnia and Herzegovina", "Qatar"] },
+  C: { teams: ["Scotland", "Brazil", "Morocco", "Haiti"] },
+  D: { teams: ["USA", "Australia", "Türkiye", "Paraguay"] },
+  E: { teams: ["Germany", "Ivory Coast", "Ecuador", "Curaçao"] },
+  F: { teams: ["Sweden", "Netherlands", "Japan", "Tunisia"] },
+  G: { teams: ["Belgium", "Egypt", "Iran", "New Zealand"] },
+  H: { teams: ["Spain", "Cape Verde", "Saudi Arabia", "Uruguay"] },
+  I: { teams: ["Norway", "France", "Senegal", "Iraq"] },
+  J: { teams: ["Argentina", "Austria", "Jordan", "Algeria"] },
+  K: { teams: ["Colombia", "DR Congo", "Portugal", "Uzbekistan"] },
+  L: { teams: ["England", "Ghana", "Panama", "Croatia"] },
+};
+const GROUP_LETTERS = Object.keys(GROUPS);
+
+const R32_TEMPLATE = [
+  { id: "M73", a: { type: "2nd", group: "A" }, b: { type: "2nd", group: "B" } },
+  { id: "M76", a: { type: "1st", group: "C" }, b: { type: "2nd", group: "F" } },
+  { id: "M74", a: { type: "1st", group: "E" }, b: { type: "3rd", pool: "ABCDF" } },
+  { id: "M75d", a: { type: "1st", group: "F" }, b: { type: "2nd", group: "C" } },
+  { id: "M75", a: { type: "2nd", group: "E" }, b: { type: "2nd", group: "I" } },
+  { id: "M77", a: { type: "1st", group: "I" }, b: { type: "3rd", pool: "CDFGH" } },
+  { id: "M78", a: { type: "1st", group: "A" }, b: { type: "3rd", pool: "CEFHI" } },
+  { id: "M79", a: { type: "1st", group: "L" }, b: { type: "3rd", pool: "EHIJK" } },
+  { id: "M80", a: { type: "1st", group: "G" }, b: { type: "3rd", pool: "AEHIJ" } },
+  { id: "M82", a: { type: "1st", group: "D" }, b: { type: "3rd", pool: "BEFIJ" } },
+  { id: "M84", a: { type: "1st", group: "H" }, b: { type: "2nd", group: "J" } },
+  { id: "M83", a: { type: "2nd", group: "K" }, b: { type: "2nd", group: "L" } },
+  { id: "M81", a: { type: "1st", group: "B" }, b: { type: "3rd", pool: "EFGIJ" } },
+  { id: "M85", a: { type: "2nd", group: "D" }, b: { type: "2nd", group: "G" } },
+  { id: "M86", a: { type: "1st", group: "J" }, b: { type: "2nd", group: "H" } },
+  { id: "M87", a: { type: "1st", group: "K" }, b: { type: "3rd", pool: "DEIJL" } },
+];
+
+const ROUND_LABELS = ["Round of 32", "Round of 16", "Quarterfinals", "Semifinals", "Final"];
+const STORAGE_KEY = "wc26-bracket-state-v1";
+
+function slotLabel(slot) {
+  if (slot.type === "3rd") return `3rd (${slot.pool.split("").join("/")})`;
+  return `${slot.type === "1st" ? "Winner" : "Runner-up"} Group ${slot.group}`;
+}
+
+function buildInitialMatches() {
+  const r32 = R32_TEMPLATE.map((m) => ({
+    id: m.id, round: 0,
+    aLabel: slotLabel(m.a), bLabel: slotLabel(m.b),
+    a: null, b: null, winner: null,
+  }));
+  const rounds = [r32];
+  for (let r = 1; r < 5; r++) {
+    const prev = rounds[r - 1];
+    const next = [];
+    for (let i = 0; i < prev.length; i += 2) {
+      next.push({
+        id: `R${r}-${i / 2}`, round: r,
+        aLabel: null, bLabel: null, a: null, b: null, winner: null,
+        fromA: prev[i].id, fromB: prev[i + 1] ? prev[i + 1].id : null,
+      });
+    }
+    rounds.push(next);
+  }
+  return rounds;
+}
+
+function defaultGroupOrder() {
+  const init = {};
+  GROUP_LETTERS.forEach((l) => (init[l] = [...GROUPS[l].teams]));
+  return init;
+}
+
+function loadSaved() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed.groupOrder || !parsed.rounds) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveState(groupOrder, advancingThirds, rounds) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      groupOrder,
+      advancingThirds: Array.from(advancingThirds),
+      rounds,
+    }));
+  } catch (e) { /* storage unavailable, ignore */ }
+}
+
+function App() {
+  const saved = useMemo(loadSaved, []);
+
+  const [groupOrder, setGroupOrder] = useState(saved?.groupOrder || defaultGroupOrder());
+  const [advancingThirds, setAdvancingThirds] = useState(
+    new Set(saved?.advancingThirds || ["A", "B", "C", "D", "E", "F", "G", "H"])
+  );
+  const [rounds, setRounds] = useState(saved?.rounds || buildInitialMatches());
+  const [view, setView] = useState("groups");
+  const [activeGroup, setActiveGroup] = useState("A");
+
+  useEffect(() => {
+    saveState(groupOrder, advancingThirds, rounds);
+  }, [groupOrder, advancingThirds, rounds]);
+
+  function moveTeam(letter, idx, dir) {
+    setGroupOrder((prev) => {
+      const arr = [...prev[letter]];
+      const newIdx = idx + dir;
+      if (newIdx < 0 || newIdx >= arr.length) return prev;
+      [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+      return { ...prev, [letter]: arr };
+    });
+  }
+
+  function toggleThird(letter) {
+    setAdvancingThirds((prev) => {
+      const next = new Set(prev);
+      if (next.has(letter)) {
+        next.delete(letter);
+      } else {
+        if (next.size >= 8) return prev;
+        next.add(letter);
+      }
+      return next;
+    });
+  }
+
+  const r32Resolved = useMemo(() => {
+    return R32_TEMPLATE.map((m) => {
+      const resolve = (slot) => {
+        if (slot.type === "1st") return groupOrder[slot.group][0];
+        if (slot.type === "2nd") return groupOrder[slot.group][1];
+        const letters = slot.pool.split("");
+        const found = letters.find((l) => advancingThirds.has(l));
+        return found ? `${groupOrder[found][2]} (3rd, Gr ${found})` : null;
+      };
+      return { id: m.id, a: resolve(m.a), b: resolve(m.b) };
+    });
+  }, [groupOrder, advancingThirds]);
+
+  function clearDownstream(allRounds, roundIdx, matchIdx) {
+    const match = allRounds[roundIdx][matchIdx];
+    if (match.winner !== null) {
+      match.winner = null;
+      if (roundIdx < allRounds.length - 1) {
+        const nextRound = allRounds[roundIdx + 1];
+        const nextMatch = nextRound.find((m) => m.fromA === match.id || m.fromB === match.id);
+        if (nextMatch) {
+          if (nextMatch.fromA === match.id) { nextMatch.a = null; nextMatch.aLabel = null; }
+          else { nextMatch.b = null; nextMatch.bLabel = null; }
+          clearDownstream(allRounds, roundIdx + 1, nextRound.indexOf(nextMatch));
+        }
+      }
+    }
+  }
+
+  function setWinner(roundIdx, matchIdx, side) {
+    setRounds((prev) => {
+      const next = prev.map((r) => r.map((m) => ({ ...m })));
+      const match = next[roundIdx][matchIdx];
+      const winnerName = side === "a" ? match.a : match.b;
+      if (!winnerName) return prev;
+      match.winner = side;
+      if (roundIdx < next.length - 1) {
+        const nextRound = next[roundIdx + 1];
+        const nextMatch = nextRound.find((m) => m.fromA === match.id || m.fromB === match.id);
+        if (nextMatch) {
+          if (nextMatch.fromA === match.id) { nextMatch.a = winnerName; nextMatch.aLabel = winnerName; }
+          else { nextMatch.b = winnerName; nextMatch.bLabel = winnerName; }
+          clearDownstream(next, roundIdx + 1, nextRound.indexOf(nextMatch));
+        }
+      }
+      return next;
+    });
+  }
+
+  const liveRounds = useMemo(() => {
+    const next = rounds.map((r) => r.map((m) => ({ ...m })));
+    next[0].forEach((m, i) => {
+      const resolved = r32Resolved[i];
+      if (m.a !== resolved.a || m.b !== resolved.b) {
+        m.a = resolved.a; m.b = resolved.b;
+        m.aLabel = resolved.a || m.aLabel; m.bLabel = resolved.b || m.bLabel;
+        if (m.winner) {
+          const winnerStillValid = (m.winner === "a" && m.a) || (m.winner === "b" && m.b);
+          if (!winnerStillValid) m.winner = null;
+        }
+      }
+    });
+    return next;
+  }, [rounds, r32Resolved]);
+
+  function resetBracket() { setRounds(buildInitialMatches()); }
+  function resetGroups() {
+    setGroupOrder(defaultGroupOrder());
+    setAdvancingThirds(new Set(["A", "B", "C", "D", "E", "F", "G", "H"]));
+    resetBracket();
+  }
+
+  const champion =
+    liveRounds[4][0].winner === "a" ? liveRounds[4][0].a :
+    liveRounds[4][0].winner === "b" ? liveRounds[4][0].b : null;
+
+  return (
+    <div className="min-h-screen bg-[#0b1f17] text-[#f4f1e8] body-f">
+      <header className="border-b border-[#f4f1e8]/15 px-5 py-5 sm:px-8 sticky top-0 bg-[#0b1f17] z-10">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-[#e6b325] flex items-center justify-center shrink-0">
+              <TrophyIcon size={18} className="text-[#0b1f17]" />
+            </div>
+            <div>
+              <h1 className="display text-2xl sm:text-3xl leading-none">2026 WORLD CUP BRACKET</h1>
+              <p className="text-[11px] sm:text-xs text-[#f4f1e8]/55 mono-f mt-0.5">
+                USA · MEXICO · CANADA — JUN 11–JUL 19
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="max-w-6xl mx-auto flex gap-2 mt-5">
+          <button onClick={() => setView("groups")}
+            className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${view === "groups" ? "bg-[#e6b325] text-[#0b1f17]" : "bg-[#f4f1e8]/10 text-[#f4f1e8]/70 hover:bg-[#f4f1e8]/15"}`}>
+            Groups
+          </button>
+          <button onClick={() => setView("bracket")}
+            className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${view === "bracket" ? "bg-[#e6b325] text-[#0b1f17]" : "bg-[#f4f1e8]/10 text-[#f4f1e8]/70 hover:bg-[#f4f1e8]/15"}`}>
+            Knockout bracket
+          </button>
+        </div>
+      </header>
+
+      {view === "groups" ? (
+        <GroupsView
+          groupOrder={groupOrder} activeGroup={activeGroup} setActiveGroup={setActiveGroup}
+          moveTeam={moveTeam} advancingThirds={advancingThirds} toggleThird={toggleThird}
+          resetGroups={resetGroups} onProceed={() => setView("bracket")}
+        />
+      ) : (
+        <BracketView rounds={liveRounds} setWinner={setWinner} resetBracket={resetBracket} champion={champion} />
+      )}
+
+      <footer className="text-center text-[10px] text-[#f4f1e8]/30 py-6 mono-f">
+        Your picks save automatically on this device.
+      </footer>
+    </div>
+  );
+}
+
+function GroupsView({ groupOrder, activeGroup, setActiveGroup, moveTeam, advancingThirds, toggleThird, resetGroups, onProceed }) {
+  return (
+    <main className="max-w-6xl mx-auto px-5 sm:px-8 py-7">
+      <div className="flex items-start justify-between gap-4 mb-5 flex-wrap">
+        <p className="text-sm text-[#f4f1e8]/60 max-w-xl">
+          Set each group's finishing order with the arrows. Pick exactly{" "}
+          <strong className="text-[#e6b325]">8</strong> third-place teams to advance — the rest of the bracket updates automatically.
+        </p>
+        <button onClick={resetGroups} className="flex items-center gap-1.5 text-xs text-[#f4f1e8]/50 hover:text-[#f4f1e8]/80 transition-colors shrink-0">
+          <ResetIcon size={13} /> Reset to current standings
+        </button>
+      </div>
+
+      <div className="flex gap-1.5 overflow-x-auto pb-2 mb-5 -mx-1 px-1">
+        {GROUP_LETTERS.map((letter) => {
+          const thirdAdvances = advancingThirds.has(letter);
+          return (
+            <button key={letter} onClick={() => setActiveGroup(letter)}
+              className={`shrink-0 w-11 h-11 rounded-lg display text-lg flex items-center justify-center relative transition-colors ${activeGroup === letter ? "bg-[#e6b325] text-[#0b1f17]" : "bg-[#f4f1e8]/8 text-[#f4f1e8]/70 hover:bg-[#f4f1e8]/15"}`}>
+              {letter}
+              {thirdAdvances && <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#4a9d6e] border-2 border-[#0b1f17]" />}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="bg-[#f4f1e8]/5 rounded-xl border border-[#f4f1e8]/10 p-5 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="display text-xl">GROUP {activeGroup}</h2>
+          <span className="text-[10px] mono-f text-[#f4f1e8]/40 uppercase">Top 2 always advance</span>
+        </div>
+        <div className="space-y-2">
+          {groupOrder[activeGroup].map((team, idx) => (
+            <div key={team} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 ${idx < 2 ? "bg-[#4a9d6e]/15 border border-[#4a9d6e]/30" : idx === 2 ? "bg-[#e6b325]/10 border border-[#e6b325]/25" : "bg-[#f4f1e8]/5 border border-[#f4f1e8]/10"}`}>
+              <span className="mono-f text-xs text-[#f4f1e8]/40 w-4">{idx + 1}</span>
+              <span className="flex-1 font-medium text-sm sm:text-base truncate">{team}</span>
+              {idx === 2 && (
+                <button onClick={() => toggleThird(activeGroup)}
+                  className={`text-[10px] px-2 py-1 rounded-full font-semibold uppercase tracking-wide shrink-0 transition-colors ${advancingThirds.has(activeGroup) ? "bg-[#4a9d6e] text-[#0b1f17]" : "bg-[#f4f1e8]/10 text-[#f4f1e8]/50"}`}>
+                  {advancingThirds.has(activeGroup) ? "Advances" : "Eliminated"}
+                </button>
+              )}
+              <div className="flex flex-col gap-0.5 shrink-0">
+                <button onClick={() => moveTeam(activeGroup, idx, -1)} disabled={idx === 0}
+                  className="w-6 h-5 flex items-center justify-center rounded text-[#f4f1e8]/50 hover:text-[#f4f1e8] hover:bg-[#f4f1e8]/10 disabled:opacity-20 disabled:hover:bg-transparent">▲</button>
+                <button onClick={() => moveTeam(activeGroup, idx, 1)} disabled={idx === 3}
+                  className="w-6 h-5 flex items-center justify-center rounded text-[#f4f1e8]/50 hover:text-[#f4f1e8] hover:bg-[#f4f1e8]/10 disabled:opacity-20 disabled:hover:bg-transparent">▼</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <p className="text-xs text-[#f4f1e8]/45 mono-f">{advancingThirds.size}/8 third-place spots selected</p>
+        <button onClick={onProceed} className="flex items-center gap-1.5 bg-[#e6b325] text-[#0b1f17] px-5 py-2.5 rounded-md font-semibold text-sm hover:bg-[#f0c14b] transition-colors">
+          View knockout bracket <ChevronRightIcon size={15} />
+        </button>
+      </div>
+    </main>
+  );
+}
+
+function BracketView({ rounds, setWinner, resetBracket, champion }) {
+  return (
+    <main className="px-3 sm:px-8 py-7">
+      <div className="max-w-6xl mx-auto flex items-center justify-between mb-5 flex-wrap gap-3">
+        <p className="text-sm text-[#f4f1e8]/60">Tap a team to advance them. Scroll sideways to follow the bracket through to the final.</p>
+        <button onClick={resetBracket} className="flex items-center gap-1.5 text-xs text-[#f4f1e8]/50 hover:text-[#f4f1e8]/80 transition-colors shrink-0">
+          <ResetIcon size={13} /> Clear picks
+        </button>
+      </div>
+
+      {champion && (
+        <div className="max-w-6xl mx-auto mb-6 rounded-xl bg-gradient-to-r from-[#e6b325]/20 to-[#e6b325]/5 border border-[#e6b325]/40 px-5 py-4 flex items-center gap-3">
+          <TrophyIcon size={22} className="text-[#e6b325] shrink-0" />
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-[#e6b325]/80 mono-f">2026 World Champion</p>
+            <p className="display text-2xl text-[#f4f1e8]">{champion}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-auto pb-4">
+        <div className="flex gap-4 sm:gap-6 min-w-max px-1">
+          {rounds.map((round, rIdx) => (
+            <div key={rIdx} className="flex flex-col gap-4" style={{ width: 220 }}>
+              <h3 className="text-center mono-f text-[11px] uppercase tracking-wider text-[#f4f1e8]/45 mb-1">{ROUND_LABELS[rIdx]}</h3>
+              <div className="flex flex-col justify-around flex-1 gap-3"
+                style={{ paddingTop: rIdx === 0 ? 0 : `${(Math.pow(2, rIdx) - 1) * 34}px`, gap: `${Math.pow(2, rIdx + 1) * 17 - 12}px` }}>
+                {round.map((match, mIdx) => (
+                  <MatchCard key={match.id} match={match} onPick={(side) => setWinner(rIdx, mIdx, side)} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function MatchCard({ match, onPick }) {
+  const aName = match.a || match.aLabel || "TBD";
+  const bName = match.b || match.bLabel || "TBD";
+  const aReady = !!match.a;
+  const bReady = !!match.b;
+  return (
+    <div className="rounded-lg border border-[#f4f1e8]/15 bg-[#f4f1e8]/5 overflow-hidden">
+      <TeamRow name={aName} ready={aReady} isWinner={match.winner === "a"} isLoser={match.winner === "b"} onClick={() => aReady && onPick("a")} />
+      <div className="h-px bg-[#f4f1e8]/10" />
+      <TeamRow name={bName} ready={bReady} isWinner={match.winner === "b"} isLoser={match.winner === "a"} onClick={() => bReady && onPick("b")} />
+    </div>
+  );
+}
+
+function TeamRow({ name, ready, isWinner, isLoser, onClick }) {
+  return (
+    <button onClick={onClick} disabled={!ready}
+      className={`w-full text-left px-3 py-2.5 text-sm transition-colors flex items-center gap-2 ${isWinner ? "bg-[#4a9d6e]/25 text-[#f4f1e8] font-semibold" : isLoser ? "text-[#f4f1e8]/35 line-through" : ready ? "text-[#f4f1e8]/90 hover:bg-[#f4f1e8]/10" : "text-[#f4f1e8]/30 italic"} ${!ready ? "cursor-default" : "cursor-pointer"}`}>
+      {isWinner && <FlagIcon size={11} className="text-[#4a9d6e] shrink-0" />}
+      <span className="truncate">{name}</span>
+    </button>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
