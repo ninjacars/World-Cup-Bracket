@@ -47,6 +47,30 @@ var GROUPS = {
 };
 var GROUP_LETTERS = Object.keys(GROUPS);
 
+var FLAGS = {
+  "Mexico": "🇲🇽", "South Korea": "🇰🇷", "Czechia": "🇨🇿", "South Africa": "🇿🇦",
+  "Canada": "🇨🇦", "Switzerland": "🇨🇭", "Bosnia and Herzegovina": "🇧🇦", "Qatar": "🇶🇦",
+  "Scotland": "🏴", "Brazil": "🇧🇷", "Morocco": "🇲🇦", "Haiti": "🇭🇹",
+  "USA": "🇺🇸", "Australia": "🇦🇺", "Türkiye": "🇹🇷", "Paraguay": "🇵🇾",
+  "Germany": "🇩🇪", "Ivory Coast": "🇨🇮", "Ecuador": "🇪🇨", "Curaçao": "🇨🇼",
+  "Sweden": "🇸🇪", "Netherlands": "🇳🇱", "Japan": "🇯🇵", "Tunisia": "🇹🇳",
+  "Belgium": "🇧🇪", "Egypt": "🇪🇬", "Iran": "🇮🇷", "New Zealand": "🇳🇿",
+  "Spain": "🇪🇸", "Cape Verde": "🇨🇻", "Saudi Arabia": "🇸🇦", "Uruguay": "🇺🇾",
+  "Norway": "🇳🇴", "France": "🇫🇷", "Senegal": "🇸🇳", "Iraq": "🇮🇶",
+  "Argentina": "🇦🇷", "Austria": "🇦🇹", "Jordan": "🇯🇴", "Algeria": "🇩🇿",
+  "Colombia": "🇨🇴", "DR Congo": "🇨🇩", "Portugal": "🇵🇹", "Uzbekistan": "🇺🇿",
+  "England": "🏴", "Ghana": "🇬🇭", "Panama": "🇵🇦", "Croatia": "🇭🇷"
+};
+
+// Returns the flag for a team name. Handles bracket labels like
+// "Czechia (3rd, Gr A)" by matching on the leading team name.
+function flagFor(name) {
+  if (!name) return "";
+  if (FLAGS[name]) return FLAGS[name];
+  var base = name.split(" (")[0];
+  return FLAGS[base] || "";
+}
+
 var R32_TEMPLATE = [
   { id: "M73", a: { type: "2nd", group: "A" }, b: { type: "2nd", group: "B" } },
   { id: "M76", a: { type: "1st", group: "C" }, b: { type: "2nd", group: "F" } },
@@ -67,7 +91,7 @@ var R32_TEMPLATE = [
 ];
 
 var ROUND_LABELS = ["Round of 32", "Round of 16", "Quarterfinals", "Semifinals", "Final"];
-var STORAGE_KEY = "wc26-bracket-state-v3";
+var STORAGE_KEY = "wc26-bracket-state-v4";
 
 function slotLabel(slot) {
   if (slot.type === "3rd") return "3rd (" + slot.pool.split("").join("/") + ")";
@@ -350,7 +374,11 @@ function renderGroupsView() {
     var border = idx < 2 ? "1px solid rgba(74,157,110,0.3)" : idx === 2 ? "1px solid rgba(230,179,37,0.25)" : "1px solid rgba(244,241,232,0.1)";
     var row = el("div", { style: { display: "flex", alignItems: "center", gap: "12px", borderRadius: "8px", padding: "10px 12px", background: bg, border: border } });
     row.appendChild(el("span", { className: "mono-f", style: { fontSize: "12px", opacity: "0.4", width: "16px" }, text: String(idx + 1) }));
-    row.appendChild(el("span", { style: { flex: "1", fontWeight: "500", fontSize: "15px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, text: team }));
+    var teamLabel = el("span", { style: { flex: "1", fontWeight: "500", fontSize: "15px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "8px" } });
+    var flag = flagFor(team);
+    if (flag) teamLabel.appendChild(el("span", { style: { fontSize: "16px" }, text: flag }));
+    teamLabel.appendChild(document.createTextNode(team));
+    row.appendChild(teamLabel);
     if (idx === 2) {
       var advances = thirds.has(state.activeGroup);
       var toggleBtn = el("button", {
@@ -474,6 +502,8 @@ function renderTeamRow(name, ready, isWinner, isLoser, onClick) {
 
   var btn = el("button", { style: style, disabled: !ready, onClick: onClick });
   if (isWinner) btn.appendChild(el("span", { style: { color: "#4a9d6e", fontSize: "11px" }, text: "●" }));
+  var flag = flagFor(name);
+  if (flag) btn.appendChild(el("span", { style: { fontSize: "15px", flexShrink: "0" }, text: flag }));
   btn.appendChild(el("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, text: name }));
   return btn;
 }
