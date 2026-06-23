@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>2026 World Cup Bracket</title>
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#0b1f17" />
+
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: #0b1f17; color: #f4f1e8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+  .display { font-family: Impact, 'Arial Narrow', sans-serif; letter-spacing: 0.02em; }
+  .mono-f { font-family: 'SF Mono', 'Courier New', monospace; }
+  button { font-family: inherit; border: none; background: none; cursor: pointer; color: inherit; padding: 0; }
+  ::-webkit-scrollbar { height: 6px; width: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgba(244,241,232,0.2); border-radius: 3px; }
+  #root { min-height: 100vh; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  .group-btn:disabled, .row-btn:disabled { cursor: default; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+/* ============================================================
+   2026 World Cup Bracket — pure vanilla JS, zero dependencies.
+   No CDN scripts, no build step. Everything below is plain
+   DOM manipulation so there is nothing that can fail to load.
+   ============================================================ */
+
+var GROUPS = {
+  A: ["Mexico", "South Korea", "Czechia", "South Africa"],
+  B: ["Canada", "Switzerland", "Bosnia and Herzegovina", "Qatar"],
+  C: ["Scotland", "Brazil", "Morocco", "Haiti"],
+  D: ["USA", "Australia", "Türkiye", "Paraguay"],
+  E: ["Germany", "Ivory Coast", "Ecuador", "Curaçao"],
+  F: ["Sweden", "Netherlands", "Japan", "Tunisia"],
+  G: ["Belgium", "Egypt", "Iran", "New Zealand"],
+  H: ["Spain", "Cape Verde", "Saudi Arabia", "Uruguay"],
+  I: ["Norway", "France", "Senegal", "Iraq"],
+  J: ["Argentina", "Austria", "Jordan", "Algeria"],
+  K: ["Colombia", "DR Congo", "Portugal", "Uzbekistan"],
+  L: ["England", "Ghana", "Panama", "Croatia"]
+};
+var GROUP_LETTERS = Object.keys(GROUPS);
+
+var FLAG_CODES = {"Mexico": "mx", "South Korea": "kr", "Czechia": "cz", "South Africa": "za", "Canada": "ca", "Switzerland": "ch", "Bosnia and Herzegovina": "ba", "Qatar": "qa", "Brazil": "br", "Morocco": "ma", "Haiti": "ht", "USA": "us", "Australia": "au", "Türkiye": "tr", "Paraguay": "py", "Germany": "de", "Ivory Coast": "ci", "Ecuador": "ec", "Curaçao": "cw", "Sweden": "se", "Netherlands": "nl", "Japan": "jp", "Tunisia": "tn", "Belgium": "be", "Egypt": "eg", "Iran": "ir", "New Zealand": "nz", "Spain": "es", "Cape Verde": "cv", "Saudi Arabia": "sa", "Uruguay": "uy", "Norway": "no", "France": "fr", "Senegal": "sn", "Iraq": "iq", "Argentina": "ar", "Austria": "at", "Jordan": "jo", "Algeria": "dz", "Colombia": "co", "DR Congo": "cd", "Portugal": "pt", "Uzbekistan": "uz", "Ghana": "gh", "Panama": "pa", "Croatia": "hr", "England": "gb-eng", "Scotland": "gb-sct"};
+var SVG_FLAGS = {
+  "England": function () {
+    return svgEl(16, 12, [
+      ["rect", { width: "16", height: "12", fill: "#ffffff" }],
+      ["rect", { x: "6", y: "0", width: "4", height: "12", fill: "#CE1124" }],
+      ["rect", { x: "0", y: "4", width: "16", height: "4", fill: "#CE1124" }]
+    ]);
+  },
+  "Scotland": function () {
+    return svgEl(16, 12, [
+      ["rect", { width: "16", height: "12", fill: "#005EB8" }],
+      ["polygon", { points: "0,0 16,12 16,9.5 3.4,0", fill: "#ffffff" }],
+      ["polygon", { points: "16,0 0,12 0,9.5 12.6,0", fill: "#ffffff" }],
+      ["polygon", { points: "0,2.5 13,12 16,12 16,9.7 3,0 0,0", fill: "#ffffff" }],
+      ["polygon", { points: "16,2.5 3,12 0,12 0,9.7 13,0 16,0", fill: "#ffffff" }]
+    ]);
+  }
+};
+
+function svgEl(w, h, shapes) {
+  var ns = "http://www.w3.org/2000/svg";
+  var svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "12");
+  svg.style.flexShrink = "0";
+  svg.style.borderRadius = "2px";
+  svg.style.display = "block";
+  shapes.forEach(function (s) {
+    var node = document.createElementNS(ns, s[0]);
+    Object.keys(s[1]).forEach(function (attr) { node.setAttribute(attr, s[1][attr]); });
+    svg.appendChild(node);
+  });
+  return svg;
+}
+
+// Returns the flag for a team name. Handles bracket labels like
+// "Czechia (3rd, Gr A)" by matching on the leading team name.
+// Returns { type: "emoji", value } or { type: "svg", value: <node> } or null.
+function flagFor(name) {
+  if (!name) return null;
+  var base = name.indexOf(" (") >= 0 ? name.split(" (")[0] : name;
+  var code = FLAG_CODES[base];
+  if (!code) return null;
+  var img=document.createElement('img');
+  img.src='https://flagcdn.com/w40/'+code+'.png';
+  img.width=16; img.height=12; img.style.flexShrink='0'; img.style.borderRadius='2px';
+  return {type:'img', value:img};
+}
+
+var R32_TEMPLATE = [
+  { id: "M73", a: { type: "2nd", group: "A" }, b: { type: "2nd", group: "B" } },
+  { id: "M76", a: { type: "1st", group: "C" }, b: { type: "2nd", group: "F" } },
+  { id: "M74", a: { type: "1st", group: "E" }, b: { type: "3rd", pool: "ABCDF" } },
+  { id: "M75d", a: { type: "1st", group: "F" }, b: { type: "2nd", group: "C" } },
+  { id: "M75", a: { type: "2nd", group: "E" }, b: { type: "2nd", group: "I" } },
+  { id: "M77", a: { type: "1st", group: "I" }, b: { type: "3rd", pool: "CDFGH" } },
+  { id: "M78", a: { type: "1st", group: "A" }, b: { type: "3rd", pool: "CEFHI" } },
+  { id: "M79", a: { type: "1st", group: "L" }, b: { type: "3rd", pool: "EHIJK" } },
+  { id: "M80", a: { type: "1st", group: "G" }, b: { type: "3rd", pool: "AEHIJ" } },
+  { id: "M82", a: { type: "1st", group: "D" }, b: { type: "3rd", pool: "BEFIJ" } },
+  { id: "M84", a: { type: "1st", group: "H" }, b: { type: "2nd", group: "J" } },
+  { id: "M83", a: { type: "2nd", group: "K" }, b: { type: "2nd", group: "L" } },
+  { id: "M81", a: { type: "1st", group: "B" }, b: { type: "3rd", pool: "EFGIJ" } },
+  { id: "M85", a: { type: "2nd", group: "D" }, b: { type: "2nd", group: "G" } },
+  { id: "M86", a: { type: "1st", group: "J" }, b: { type: "2nd", group: "H" } },
+  { id: "M87", a: { type: "1st", group: "K" }, b: { type: "3rd", pool: "DEIJL" } }
+];
+
+var ROUND_LABELS = ["Round of 32", "Round of 16", "Quarterfinals", "Semifinals", "Final"];
+var STORAGE_KEY = "wc26-bracket-state-v4";
+
+function slotLabel(slot) {
+  if (slot.type === "3rd") return "3rd (" + slot.pool.split("").join("/") + ")";
+  return (slot.type === "1st" ? "Winner" : "Runner-up") + " Group " + slot.group;
+}
+
+function buildInitialMatches() {
+  var r32 = R32_TEMPLATE.map(function (m) {
+    return { id: m.id, round: 0, aLabel: slotLabel(m.a), bLabel: slotLabel(m.b), a: null, b: null, winner: null };
+  });
+  var rounds = [r32];
+  for (var r = 1; r < 5; r++) {
+    var prev = rounds[r - 1];
+    var next = [];
+    for (var i = 0; i < prev.length; i += 2) {
+      next.push({
+        id: "R" + r + "-" + (i / 2), round: r,
+        aLabel: null, bLabel: null, a: null, b: null, winner: null,
+        fromA: prev[i].id, fromB: prev[i + 1] ? prev[i + 1].id : null
+      });
+    }
+    rounds.push(next);
+  }
+  return rounds;
+}
+
+function defaultGroupOrder() {
+  var init = {};
+  GROUP_LETTERS.forEach(function (l) { init[l] = GROUPS[l].slice(); });
+  return init;
+}
+
+function clearDownstream(allRounds, roundIdx, matchIdx) {
+  var match = allRounds[roundIdx][matchIdx];
+  if (match.winner !== null) {
+    match.winner = null;
+    if (roundIdx < allRounds.length - 1) {
+      var nextRound = allRounds[roundIdx + 1];
+      var nextMatch = nextRound.find(function (m) { return m.fromA === match.id || m.fromB === match.id; });
+      if (nextMatch) {
+        if (nextMatch.fromA === match.id) { nextMatch.a = null; nextMatch.aLabel = null; }
+        else { nextMatch.b = null; nextMatch.bLabel = null; }
+        clearDownstream(allRounds, roundIdx + 1, nextRound.indexOf(nextMatch));
+      }
+    }
+  }
+}
+
+/* ---------------- State ---------------- */
+var state = loadSaved() || {
+  groupOrder: defaultGroupOrder(),
+  advancingThirds: ["A", "B", "C", "D", "E", "F", "G", "H"],
+  rounds: buildInitialMatches(),
+  view: "groups",
+  activeGroup: "A"
+};
+if (!state.view) state.view = "groups";
+if (!state.activeGroup) state.activeGroup = "A";
+
+function loadSaved() {
+  try {
+    var raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    var parsed = JSON.parse(raw);
+    if (!parsed.groupOrder || !parsed.rounds) return null;
+    return parsed;
+  } catch (e) { return null; }
+}
+
+function persist() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      groupOrder: state.groupOrder,
+      advancingThirds: state.advancingThirds,
+      rounds: state.rounds
+    }));
+  } catch (e) {}
+}
+
+function advancingSet() { return new Set(state.advancingThirds); }
+
+function resolveR32() {
+  var thirds = advancingSet();
+  return R32_TEMPLATE.map(function (m) {
+    function resolve(slot) {
+      if (slot.type === "1st") return state.groupOrder[slot.group][0];
+      if (slot.type === "2nd") return state.groupOrder[slot.group][1];
+      var letters = slot.pool.split("");
+      var found = letters.find(function (l) { return thirds.has(l); });
+      return found ? (state.groupOrder[found][2] + " (3rd, Gr " + found + ")") : null;
+    }
+    return { id: m.id, a: resolve(m.a), b: resolve(m.b) };
+  });
+}
+
+function syncR32IntoRounds() {
+  var resolved = resolveR32();
+  state.rounds[0].forEach(function (m, i) {
+    var r = resolved[i];
+    if (m.a !== r.a || m.b !== r.b) {
+      m.a = r.a; m.b = r.b;
+      m.aLabel = r.a || m.aLabel; m.bLabel = r.b || m.bLabel;
+      if (m.winner) {
+        var stillValid = (m.winner === "a" && m.a) || (m.winner === "b" && m.b);
+        if (!stillValid) m.winner = null;
+      }
+    }
+  });
+}
+
+function moveTeam(letter, idx, dir) {
+  var arr = state.groupOrder[letter];
+  var newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= arr.length) return;
+  var tmp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = tmp;
+  persist();
+  render();
+}
+
+function toggleThird(letter) {
+  var idx = state.advancingThirds.indexOf(letter);
+  if (idx >= 0) {
+    state.advancingThirds.splice(idx, 1);
+  } else {
+    if (state.advancingThirds.length >= 8) return;
+    state.advancingThirds.push(letter);
+  }
+  persist();
+  render();
+}
+
+function setWinner(roundIdx, matchIdx, side) {
+  var match = state.rounds[roundIdx][matchIdx];
+  var winnerName = side === "a" ? match.a : match.b;
+  if (!winnerName) return;
+  match.winner = side;
+  if (roundIdx < state.rounds.length - 1) {
+    var nextRound = state.rounds[roundIdx + 1];
+    var nextMatch = nextRound.find(function (m) { return m.fromA === match.id || m.fromB === match.id; });
+    if (nextMatch) {
+      if (nextMatch.fromA === match.id) { nextMatch.a = winnerName; nextMatch.aLabel = winnerName; }
+      else { nextMatch.b = winnerName; nextMatch.bLabel = winnerName; }
+      clearDownstream(state.rounds, roundIdx + 1, nextRound.indexOf(nextMatch));
+    }
+  }
+  persist();
+  render();
+}
+
+function resetBracket() {
+  state.rounds = buildInitialMatches();
+  persist();
+  render();
+}
+
+function resetGroups() {
+  state.groupOrder = defaultGroupOrder();
+  state.advancingThirds = ["A", "B", "C", "D", "E", "F", "G", "H"];
+  state.rounds = buildInitialMatches();
+  persist();
+  render();
+}
+
+function setView(v) { state.view = v; render(); }
+function setActiveGroup(g) { state.activeGroup = g; render(); }
+
+/* ---------------- DOM helpers ---------------- */
+function el(tag, attrs, children) {
+  var node = document.createElement(tag);
+  attrs = attrs || {};
+  Object.keys(attrs).forEach(function (key) {
+    if (key === "style") {
+      Object.assign(node.style, attrs.style);
+    } else if (key === "onClick") {
+      node.addEventListener("click", attrs.onClick);
+    } else if (key === "className") {
+      node.className = attrs.className;
+    } else if (key === "disabled") {
+      node.disabled = attrs.disabled;
+    } else if (key === "text") {
+      node.textContent = attrs.text;
+    } else {
+      node.setAttribute(key, attrs[key]);
+    }
+  });
+  (children || []).forEach(function (c) {
+    if (c == null) return;
+    if (typeof c === "string") node.appendChild(document.createTextNode(c));
+    else node.appendChild(c);
+  });
+  return node;
+}
+
+/* ---------------- Render: Header ---------------- */
+function renderHeader() {
+  var header = el("header", { style: { borderBottom: "1px solid rgba(244,241,232,0.15)", padding: "20px 20px", position: "sticky", top: "0", background: "#0b1f17", zIndex: "10" } });
+
+  var topRow = el("div", { className: "wrap", style: { display: "flex", alignItems: "center", justifyContent: "space-between" } });
+  var left = el("div", { style: { display: "flex", alignItems: "center", gap: "12px" } });
+  var badge = el("div", { style: { width: "36px", height: "36px", borderRadius: "50%", background: "#e6b325", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: "0", fontSize: "18px" } }, ["🏆"]);
+  var titleBlock = el("div", {}, [
+    el("h1", { className: "display", style: { fontSize: "26px", margin: "0", lineHeight: "1" }, text: "2026 WORLD CUP BRACKET" }),
+    el("p", { className: "mono-f", style: { fontSize: "11px", opacity: "0.55", margin: "4px 0 0" }, text: "USA · MEXICO · CANADA — JUN 11–JUL 19" })
+  ]);
+  left.appendChild(badge);
+  left.appendChild(titleBlock);
+  topRow.appendChild(left);
+  header.appendChild(topRow);
+
+  var tabs = el("div", { className: "wrap", style: { display: "flex", gap: "8px", marginTop: "18px" } });
+  var groupsTab = el("button", {
+    style: { padding: "8px 16px", borderRadius: "6px", fontSize: "14px", fontWeight: "600",
+      background: state.view === "groups" ? "#e6b325" : "rgba(244,241,232,0.1)",
+      color: state.view === "groups" ? "#0b1f17" : "rgba(244,241,232,0.7)" },
+    onClick: function () { setView("groups"); },
+    text: "Groups"
+  });
+  var bracketTab = el("button", {
+    style: { padding: "8px 16px", borderRadius: "6px", fontSize: "14px", fontWeight: "600",
+      background: state.view === "bracket" ? "#e6b325" : "rgba(244,241,232,0.1)",
+      color: state.view === "bracket" ? "#0b1f17" : "rgba(244,241,232,0.7)" },
+    onClick: function () { setView("bracket"); },
+    text: "Knockout bracket"
+  });
+  tabs.appendChild(groupsTab);
+  tabs.appendChild(bracketTab);
+  header.appendChild(tabs);
+
+  return header;
+}
+
+/* ---------------- Render: Groups view ---------------- */
+function renderGroupsView() {
+  var main = el("main", { className: "wrap", style: { padding: "24px 20px" } });
+
+  var introRow = el("div", { style: { display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap", marginBottom: "18px" } });
+  var introText = el("p", { style: { fontSize: "14px", opacity: "0.6", maxWidth: "520px", margin: "0" } });
+  introText.appendChild(document.createTextNode("Set each group's finishing order with the arrows. Pick exactly "));
+  var strong = el("strong", { style: { color: "#e6b325" }, text: "8" });
+  introText.appendChild(strong);
+  introText.appendChild(document.createTextNode(" third-place teams to advance — the rest of the bracket updates automatically."));
+  var resetBtn = el("button", { style: { fontSize: "12px", opacity: "0.5", flexShrink: "0", whiteSpace: "nowrap" }, onClick: resetGroups, text: "↺ Reset to current standings" });
+  introRow.appendChild(introText);
+  introRow.appendChild(resetBtn);
+  main.appendChild(introRow);
+
+  var letterRow = el("div", { style: { display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "8px", marginBottom: "18px" } });
+  var thirds = advancingSet();
+  GROUP_LETTERS.forEach(function (letter) {
+    var isActive = state.activeGroup === letter;
+    var btn = el("button", {
+      className: "group-btn",
+      style: {
+        flexShrink: "0", width: "44px", height: "44px", borderRadius: "8px", fontSize: "18px", fontFamily: "Impact, sans-serif",
+        display: "flex", alignItems: "center", justifyContent: "center", position: "relative",
+        background: isActive ? "#e6b325" : "rgba(244,241,232,0.08)",
+        color: isActive ? "#0b1f17" : "rgba(244,241,232,0.7)"
+      },
+      onClick: function () { setActiveGroup(letter); },
+      text: letter
+    });
+    if (thirds.has(letter)) {
+      var dot = el("span", { style: { position: "absolute", top: "-3px", right: "-3px", width: "11px", height: "11px", borderRadius: "50%", background: "#4a9d6e", border: "2px solid #0b1f17" } });
+      btn.appendChild(dot);
+    }
+    letterRow.appendChild(btn);
+  });
+  main.appendChild(letterRow);
+
+  var card = el("div", { style: { background: "rgba(244,241,232,0.05)", borderRadius: "12px", border: "1px solid rgba(244,241,232,0.1)", padding: "20px", marginBottom: "24px" } });
+  var cardHead = el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" } }, [
+    el("h2", { className: "display", style: { fontSize: "22px", margin: "0" }, text: "GROUP " + state.activeGroup }),
+    el("span", { className: "mono-f", style: { fontSize: "10px", opacity: "0.4", textTransform: "uppercase" }, text: "Top 2 always advance" })
+  ]);
+  card.appendChild(cardHead);
+
+  var list = el("div", { style: { display: "flex", flexDirection: "column", gap: "8px" } });
+  state.groupOrder[state.activeGroup].forEach(function (team, idx) {
+    var bg = idx < 2 ? "rgba(74,157,110,0.15)" : idx === 2 ? "rgba(230,179,37,0.1)" : "rgba(244,241,232,0.05)";
+    var border = idx < 2 ? "1px solid rgba(74,157,110,0.3)" : idx === 2 ? "1px solid rgba(230,179,37,0.25)" : "1px solid rgba(244,241,232,0.1)";
+    var row = el("div", { style: { display: "flex", alignItems: "center", gap: "12px", borderRadius: "8px", padding: "10px 12px", background: bg, border: border } });
+    row.appendChild(el("span", { className: "mono-f", style: { fontSize: "12px", opacity: "0.4", width: "16px" }, text: String(idx + 1) }));
+    var teamLabel = el("span", { style: { flex: "1", fontWeight: "500", fontSize: "15px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "8px" } });
+    var flagInfo = flagFor(team);
+    if (flagInfo) {
+      teamLabel.appendChild(flagInfo.value);
+    }
+    teamLabel.appendChild(document.createTextNode(team));
+    row.appendChild(teamLabel);
+    if (idx === 2) {
+      var advances = thirds.has(state.activeGroup);
+      var toggleBtn = el("button", {
+        style: { fontSize: "10px", padding: "4px 8px", borderRadius: "999px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px", flexShrink: "0",
+          background: advances ? "#4a9d6e" : "rgba(244,241,232,0.1)",
+          color: advances ? "#0b1f17" : "rgba(244,241,232,0.5)" },
+        onClick: function () { toggleThird(state.activeGroup); },
+        text: advances ? "Advances" : "Eliminated"
+      });
+      row.appendChild(toggleBtn);
+    }
+    var arrows = el("div", { style: { display: "flex", flexDirection: "column", gap: "2px", flexShrink: "0" } });
+    var upBtn = el("button", {
+      className: "row-btn", disabled: idx === 0,
+      style: { width: "22px", height: "18px", fontSize: "11px", opacity: idx === 0 ? "0.2" : "0.6" },
+      onClick: function () { moveTeam(state.activeGroup, idx, -1); },
+      text: "▲"
+    });
+    var downBtn = el("button", {
+      className: "row-btn", disabled: idx === 3,
+      style: { width: "22px", height: "18px", fontSize: "11px", opacity: idx === 3 ? "0.2" : "0.6" },
+      onClick: function () { moveTeam(state.activeGroup, idx, 1); },
+      text: "▼"
+    });
+    arrows.appendChild(upBtn);
+    arrows.appendChild(downBtn);
+    row.appendChild(arrows);
+    list.appendChild(row);
+  });
+  card.appendChild(list);
+  main.appendChild(card);
+
+  var footRow = el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" } });
+  footRow.appendChild(el("p", { className: "mono-f", style: { fontSize: "12px", opacity: "0.45", margin: "0" }, text: thirds.size + "/8 third-place spots selected" }));
+  footRow.appendChild(el("button", {
+    style: { display: "flex", alignItems: "center", gap: "6px", background: "#e6b325", color: "#0b1f17", padding: "10px 20px", borderRadius: "6px", fontWeight: "600", fontSize: "14px" },
+    onClick: function () { setView("bracket"); },
+    text: "View knockout bracket →"
+  }));
+  main.appendChild(footRow);
+
+  return main;
+}
+
+/* ---------------- Bracket geometry ---------------- */
+var CARD_H = 79;     // measured rendered height of a 2-row match card
+var GAP0 = 14;        // vertical gap between adjacent round-of-32 cards
+var COL_W = 210;      // width of each round's card column
+var COL_GAP = 40;     // horizontal gap between columns (line-routing space)
+
+function computeLayout() {
+  var roundSizes = [16, 8, 4, 2, 1];
+  var positions = [];
+
+  var r0 = [];
+  for (var i = 0; i < roundSizes[0]; i++) {
+    r0.push({ top: i * (CARD_H + GAP0), height: CARD_H });
+  }
+  positions.push(r0);
+
+  for (var r = 1; r < roundSizes.length; r++) {
+    var prev = positions[r - 1];
+    var cur = [];
+    for (var i = 0; i < roundSizes[r]; i++) {
+      var topA = prev[i * 2].top + prev[i * 2].height / 2;
+      var topB = prev[i * 2 + 1].top + prev[i * 2 + 1].height / 2;
+      var mid = (topA + topB) / 2 - CARD_H / 2;
+      cur.push({ top: mid, height: CARD_H });
+    }
+    positions.push(cur);
+  }
+  return positions;
+}
+
+/* ---------------- Render: Bracket view ---------------- */
+function renderBracketView() {
+  syncR32IntoRounds();
+  var rounds = state.rounds;
+  var finalMatch = rounds[4][0];
+  var champion = finalMatch.winner === "a" ? finalMatch.a : finalMatch.winner === "b" ? finalMatch.b : null;
+
+  var main = el("main", { style: { padding: "24px 12px" } });
+
+  var topRow = el("div", { className: "wrap", style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "18px" } });
+  topRow.appendChild(el("p", { style: { fontSize: "14px", opacity: "0.6", margin: "0" }, text: "Tap a team to advance them. Scroll sideways to follow the bracket through to the final." }));
+  topRow.appendChild(el("button", { style: { fontSize: "12px", opacity: "0.5", whiteSpace: "nowrap" }, onClick: resetBracket, text: "↺ Clear picks" }));
+  main.appendChild(topRow);
+
+  if (champion) {
+    var champBox = el("div", { className: "wrap", style: { marginBottom: "22px", borderRadius: "12px", background: "linear-gradient(to right, rgba(230,179,37,0.2), rgba(230,179,37,0.05))", border: "1px solid rgba(230,179,37,0.4)", padding: "16px 20px", display: "flex", alignItems: "center", gap: "12px" } });
+    champBox.appendChild(el("span", { style: { fontSize: "26px" }, text: "🏆" }));
+    var champText = el("div", {}, [
+      el("p", { className: "mono-f", style: { fontSize: "10px", textTransform: "uppercase", letterSpacing: "1px", color: "rgba(230,179,37,0.8)", margin: "0" }, text: "2026 World Champion" }),
+      el("p", { className: "display", style: { fontSize: "24px", margin: "0" }, text: champion })
+    ]);
+    champBox.appendChild(champText);
+    main.appendChild(champBox);
+  }
+
+  var layout = computeLayout();
+  var totalHeight = layout[0][layout[0].length - 1].top + CARD_H;
+  var totalWidth = layout.length * (COL_W + COL_GAP) - COL_GAP;
+
+  var scrollWrap = el("div", { style: { overflowX: "auto", paddingBottom: "16px" } });
+  var canvas = el("div", { style: { position: "relative", width: totalWidth + "px", height: (totalHeight + 28) + "px" } });
+
+  // Column headers
+  layout.forEach(function (round, rIdx) {
+    var headerLeft = rIdx * (COL_W + COL_GAP);
+    canvas.appendChild(el("h3", {
+      className: "mono-f",
+      style: {
+        position: "absolute", left: headerLeft + "px", top: "0px", width: COL_W + "px",
+        textAlign: "center", fontSize: "11px", textTransform: "uppercase", letterSpacing: "1px", opacity: "0.45", margin: "0"
+      },
+      text: ROUND_LABELS[rIdx]
+    }));
+  });
+
+  // SVG connector lines (drawn first, beneath the cards)
+  var svgNs = "http://www.w3.org/2000/svg";
+  var svg = document.createElementNS(svgNs, "svg");
+  svg.setAttribute("width", String(totalWidth));
+  svg.setAttribute("height", String(totalHeight + 28));
+  svg.style.position = "absolute";
+  svg.style.left = "0";
+  svg.style.top = "28px";
+  svg.style.pointerEvents = "none";
+
+  for (var rIdx = 0; rIdx < layout.length - 1; rIdx++) {
+    var round = layout[rIdx];
+    var nextRound = layout[rIdx + 1];
+    var colLeft = rIdx * (COL_W + COL_GAP);
+    var nextColLeft = (rIdx + 1) * (COL_W + COL_GAP);
+    var midX = colLeft + COL_W + COL_GAP / 2;
+
+    for (var i = 0; i < round.length; i += 2) {
+      var topA = round[i].top + round[i].height / 2;
+      var topB = round[i + 1].top + round[i + 1].height / 2;
+      var parentTop = nextRound[i / 2].top + nextRound[i / 2].height / 2;
+
+      // horizontal stub out of card A, vertical connector, horizontal stub out of card B, then merge into parent
+      appendLine(svg, colLeft + COL_W, topA, midX, topA);
+      appendLine(svg, colLeft + COL_W, topB, midX, topB);
+      appendLine(svg, midX, topA, midX, topB);
+      appendLine(svg, midX, parentTop, nextColLeft, parentTop);
+    }
+  }
+  canvas.appendChild(svg);
+
+  // Match cards, absolutely positioned
+  layout.forEach(function (roundLayout, rIdx) {
+    var colLeft = rIdx * (COL_W + COL_GAP);
+    rounds[rIdx].forEach(function (match, mIdx) {
+      var pos = roundLayout[mIdx];
+      var card = renderMatchCard(match, rIdx, mIdx);
+      card.style.position = "absolute";
+      card.style.left = colLeft + "px";
+      card.style.top = (pos.top + 28) + "px";
+      card.style.width = COL_W + "px";
+      canvas.appendChild(card);
+    });
+  });
+
+  scrollWrap.appendChild(canvas);
+  main.appendChild(scrollWrap);
+
+  return main;
+}
+
+function appendLine(svg, x1, y1, x2, y2) {
+  var ns = "http://www.w3.org/2000/svg";
+  var line = document.createElementNS(ns, "line");
+  line.setAttribute("x1", String(x1));
+  line.setAttribute("y1", String(y1));
+  line.setAttribute("x2", String(x2));
+  line.setAttribute("y2", String(y2));
+  line.setAttribute("stroke", "rgba(244,241,232,0.25)");
+  line.setAttribute("stroke-width", "1.5");
+  svg.appendChild(line);
+}
+
+function renderMatchCard(match, rIdx, mIdx) {
+  var aName = match.a || match.aLabel || "TBD";
+  var bName = match.b || match.bLabel || "TBD";
+  var aReady = !!match.a;
+  var bReady = !!match.b;
+
+  var card = el("div", { style: { borderRadius: "8px", border: "1px solid rgba(244,241,232,0.15)", background: "rgba(244,241,232,0.05)", overflow: "hidden" } });
+  card.appendChild(renderTeamRow(aName, aReady, match.winner === "a", match.winner === "b", function () { if (aReady) setWinner(rIdx, mIdx, "a"); }));
+  card.appendChild(el("div", { style: { height: "1px", background: "rgba(244,241,232,0.1)" } }));
+  card.appendChild(renderTeamRow(bName, bReady, match.winner === "b", match.winner === "a", function () { if (bReady) setWinner(rIdx, mIdx, "b"); }));
+  return card;
+}
+
+function renderTeamRow(name, ready, isWinner, isLoser, onClick) {
+  var style = {
+    width: "100%", textAlign: "left", padding: "10px 12px", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px",
+    cursor: ready ? "pointer" : "default"
+  };
+  if (isWinner) { style.background = "rgba(74,157,110,0.25)"; style.fontWeight = "600"; }
+  else if (isLoser) { style.opacity = "0.35"; style.textDecoration = "line-through"; }
+  else if (ready) { style.opacity = "0.9"; }
+  else { style.opacity = "0.3"; style.fontStyle = "italic"; }
+
+  var btn = el("button", { style: style, disabled: !ready, onClick: onClick });
+  if (isWinner) btn.appendChild(el("span", { style: { color: "#4a9d6e", fontSize: "11px" }, text: "●" }));
+  var flagInfo = flagFor(name);
+  if (flagInfo) {
+    btn.appendChild(flagInfo.value);
+  }
+  btn.appendChild(el("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, text: name }));
+  return btn;
+}
+
+/* ---------------- Main render ---------------- */
+function render() {
+  var root = document.getElementById("root");
+  root.innerHTML = "";
+  root.appendChild(renderHeader());
+  root.appendChild(state.view === "groups" ? renderGroupsView() : renderBracketView());
+  root.appendChild(el("footer", { style: { textAlign: "center", fontSize: "10px", opacity: "0.3", padding: "24px 0", fontFamily: "monospace" }, text: "Your picks save automatically on this device." }));
+}
+
+render();
+</script>
+</body>
+</html>
