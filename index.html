@@ -467,6 +467,36 @@ function renderGroupsView() {
   return main;
 }
 
+/* ---------------- Bracket geometry ---------------- */
+var CARD_H = 79;     // measured rendered height of a 2-row match card
+var GAP0 = 14;        // vertical gap between adjacent round-of-32 cards
+var COL_W = 210;      // width of each round's card column
+var COL_GAP = 40;     // horizontal gap between columns (line-routing space)
+
+function computeLayout() {
+  var roundSizes = [16, 8, 4, 2, 1];
+  var positions = [];
+
+  var r0 = [];
+  for (var i = 0; i < roundSizes[0]; i++) {
+    r0.push({ top: i * (CARD_H + GAP0), height: CARD_H });
+  }
+  positions.push(r0);
+
+  for (var r = 1; r < roundSizes.length; r++) {
+    var prev = positions[r - 1];
+    var cur = [];
+    for (var i = 0; i < roundSizes[r]; i++) {
+      var topA = prev[i * 2].top + prev[i * 2].height / 2;
+      var topB = prev[i * 2 + 1].top + prev[i * 2 + 1].height / 2;
+      var mid = (topA + topB) / 2 - CARD_H / 2;
+      cur.push({ top: mid, height: CARD_H });
+    }
+    positions.push(cur);
+  }
+  return positions;
+}
+
 /* ---------------- Render: Bracket view ---------------- */
 function renderBracketView() {
   syncR32IntoRounds();
@@ -492,33 +522,87 @@ function renderBracketView() {
     main.appendChild(champBox);
   }
 
+  var layout = computeLayout();
+  var totalHeight = layout[0][layout[0].length - 1].top + CARD_H;
+  var totalWidth = layout.length * (COL_W + COL_GAP) - COL_GAP;
+
   var scrollWrap = el("div", { style: { overflowX: "auto", paddingBottom: "16px" } });
-  var roundsRow = el("div", { style: { display: "flex", gap: "20px", minWidth: "max-content", padding: "0 4px" } });
+  var canvas = el("div", { style: { position: "relative", width: totalWidth + "px", height: (totalHeight + 28) + "px" } });
 
-  rounds.forEach(function (round, rIdx) {
-    var col = el("div", { style: { display: "flex", flexDirection: "column", gap: "16px", width: "210px" } });
-    col.appendChild(el("h3", { className: "mono-f", style: { textAlign: "center", fontSize: "11px", textTransform: "uppercase", letterSpacing: "1px", opacity: "0.45", margin: "0 0 4px" }, text: ROUND_LABELS[rIdx] }));
-
-    var matchesWrap = el("div", {
+  // Column headers
+  layout.forEach(function (round, rIdx) {
+    var headerLeft = rIdx * (COL_W + COL_GAP);
+    canvas.appendChild(el("h3", {
+      className: "mono-f",
       style: {
-        display: "flex", flexDirection: "column", justifyContent: "space-around", flex: "1",
-        paddingTop: (rIdx === 0 ? 0 : (Math.pow(2, rIdx) - 1) * 34) + "px",
-        gap: (Math.pow(2, rIdx + 1) * 17 - 12) + "px"
-      }
-    });
-
-    round.forEach(function (match, mIdx) {
-      matchesWrap.appendChild(renderMatchCard(match, rIdx, mIdx));
-    });
-
-    col.appendChild(matchesWrap);
-    roundsRow.appendChild(col);
+        position: "absolute", left: headerLeft + "px", top: "0px", width: COL_W + "px",
+        textAlign: "center", fontSize: "11px", textTransform: "uppercase", letterSpacing: "1px", opacity: "0.45", margin: "0"
+      },
+      text: ROUND_LABELS[rIdx]
+    }));
   });
 
-  scrollWrap.appendChild(roundsRow);
+  // SVG connector lines (drawn first, beneath the cards)
+  var svgNs = "http://www.w3.org/2000/svg";
+  var svg = document.createElementNS(svgNs, "svg");
+  svg.setAttribute("width", String(totalWidth));
+  svg.setAttribute("height", String(totalHeight + 28));
+  svg.style.position = "absolute";
+  svg.style.left = "0";
+  svg.style.top = "28px";
+  svg.style.pointerEvents = "none";
+
+  for (var rIdx = 0; rIdx < layout.length - 1; rIdx++) {
+    var round = layout[rIdx];
+    var nextRound = layout[rIdx + 1];
+    var colLeft = rIdx * (COL_W + COL_GAP);
+    var nextColLeft = (rIdx + 1) * (COL_W + COL_GAP);
+    var midX = colLeft + COL_W + COL_GAP / 2;
+
+    for (var i = 0; i < round.length; i += 2) {
+      var topA = round[i].top + round[i].height / 2;
+      var topB = round[i + 1].top + round[i + 1].height / 2;
+      var parentTop = nextRound[i / 2].top + nextRound[i / 2].height / 2;
+
+      // horizontal stub out of card A, vertical connector, horizontal stub out of card B, then merge into parent
+      appendLine(svg, colLeft + COL_W, topA, midX, topA);
+      appendLine(svg, colLeft + COL_W, topB, midX, topB);
+      appendLine(svg, midX, topA, midX, topB);
+      appendLine(svg, midX, parentTop, nextColLeft, parentTop);
+    }
+  }
+  canvas.appendChild(svg);
+
+  // Match cards, absolutely positioned
+  layout.forEach(function (roundLayout, rIdx) {
+    var colLeft = rIdx * (COL_W + COL_GAP);
+    rounds[rIdx].forEach(function (match, mIdx) {
+      var pos = roundLayout[mIdx];
+      var card = renderMatchCard(match, rIdx, mIdx);
+      card.style.position = "absolute";
+      card.style.left = colLeft + "px";
+      card.style.top = (pos.top + 28) + "px";
+      card.style.width = COL_W + "px";
+      canvas.appendChild(card);
+    });
+  });
+
+  scrollWrap.appendChild(canvas);
   main.appendChild(scrollWrap);
 
   return main;
+}
+
+function appendLine(svg, x1, y1, x2, y2) {
+  var ns = "http://www.w3.org/2000/svg";
+  var line = document.createElementNS(ns, "line");
+  line.setAttribute("x1", String(x1));
+  line.setAttribute("y1", String(y1));
+  line.setAttribute("x2", String(x2));
+  line.setAttribute("y2", String(y2));
+  line.setAttribute("stroke", "rgba(244,241,232,0.25)");
+  line.setAttribute("stroke-width", "1.5");
+  svg.appendChild(line);
 }
 
 function renderMatchCard(match, rIdx, mIdx) {
