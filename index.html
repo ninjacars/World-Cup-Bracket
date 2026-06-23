@@ -50,7 +50,7 @@ var GROUP_LETTERS = Object.keys(GROUPS);
 var FLAGS = {
   "Mexico": "🇲🇽", "South Korea": "🇰🇷", "Czechia": "🇨🇿", "South Africa": "🇿🇦",
   "Canada": "🇨🇦", "Switzerland": "🇨🇭", "Bosnia and Herzegovina": "🇧🇦", "Qatar": "🇶🇦",
-  "Scotland": "🏴", "Brazil": "🇧🇷", "Morocco": "🇲🇦", "Haiti": "🇭🇹",
+  "Brazil": "🇧🇷", "Morocco": "🇲🇦", "Haiti": "🇭🇹",
   "USA": "🇺🇸", "Australia": "🇦🇺", "Türkiye": "🇹🇷", "Paraguay": "🇵🇾",
   "Germany": "🇩🇪", "Ivory Coast": "🇨🇮", "Ecuador": "🇪🇨", "Curaçao": "🇨🇼",
   "Sweden": "🇸🇪", "Netherlands": "🇳🇱", "Japan": "🇯🇵", "Tunisia": "🇹🇳",
@@ -59,16 +59,57 @@ var FLAGS = {
   "Norway": "🇳🇴", "France": "🇫🇷", "Senegal": "🇸🇳", "Iraq": "🇮🇶",
   "Argentina": "🇦🇷", "Austria": "🇦🇹", "Jordan": "🇯🇴", "Algeria": "🇩🇿",
   "Colombia": "🇨🇴", "DR Congo": "🇨🇩", "Portugal": "🇵🇹", "Uzbekistan": "🇺🇿",
-  "England": "🏴", "Ghana": "🇬🇭", "Panama": "🇵🇦", "Croatia": "🇭🇷"
+  "Ghana": "🇬🇭", "Panama": "🇵🇦", "Croatia": "🇭🇷"
 };
+
+// England and Scotland have no reliably-rendering emoji flag across
+// platforms (the tag-sequence flags often show as a blank/black box),
+// so these two are drawn as small inline SVGs instead. See svgFlagFor().
+var SVG_FLAGS = {
+  "England": function () {
+    return svgEl(16, 12, [
+      ["rect", { width: "16", height: "12", fill: "#ffffff" }],
+      ["rect", { x: "6", y: "0", width: "4", height: "12", fill: "#CE1124" }],
+      ["rect", { x: "0", y: "4", width: "16", height: "4", fill: "#CE1124" }]
+    ]);
+  },
+  "Scotland": function () {
+    return svgEl(16, 12, [
+      ["rect", { width: "16", height: "12", fill: "#005EB8" }],
+      ["polygon", { points: "0,0 16,12 16,9.5 3.4,0", fill: "#ffffff" }],
+      ["polygon", { points: "16,0 0,12 0,9.5 12.6,0", fill: "#ffffff" }],
+      ["polygon", { points: "0,2.5 13,12 16,12 16,9.7 3,0 0,0", fill: "#ffffff" }],
+      ["polygon", { points: "16,2.5 3,12 0,12 0,9.7 13,0 16,0", fill: "#ffffff" }]
+    ]);
+  }
+};
+
+function svgEl(w, h, shapes) {
+  var ns = "http://www.w3.org/2000/svg";
+  var svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "12");
+  svg.style.flexShrink = "0";
+  svg.style.borderRadius = "2px";
+  svg.style.display = "block";
+  shapes.forEach(function (s) {
+    var node = document.createElementNS(ns, s[0]);
+    Object.keys(s[1]).forEach(function (attr) { node.setAttribute(attr, s[1][attr]); });
+    svg.appendChild(node);
+  });
+  return svg;
+}
 
 // Returns the flag for a team name. Handles bracket labels like
 // "Czechia (3rd, Gr A)" by matching on the leading team name.
+// Returns { type: "emoji", value } or { type: "svg", value: <node> } or null.
 function flagFor(name) {
-  if (!name) return "";
-  if (FLAGS[name]) return FLAGS[name];
-  var base = name.split(" (")[0];
-  return FLAGS[base] || "";
+  if (!name) return null;
+  var base = name.indexOf(" (") >= 0 ? name.split(" (")[0] : name;
+  if (SVG_FLAGS[base]) return { type: "svg", value: SVG_FLAGS[base]() };
+  if (FLAGS[base]) return { type: "emoji", value: FLAGS[base] };
+  return null;
 }
 
 var R32_TEMPLATE = [
@@ -375,8 +416,11 @@ function renderGroupsView() {
     var row = el("div", { style: { display: "flex", alignItems: "center", gap: "12px", borderRadius: "8px", padding: "10px 12px", background: bg, border: border } });
     row.appendChild(el("span", { className: "mono-f", style: { fontSize: "12px", opacity: "0.4", width: "16px" }, text: String(idx + 1) }));
     var teamLabel = el("span", { style: { flex: "1", fontWeight: "500", fontSize: "15px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "8px" } });
-    var flag = flagFor(team);
-    if (flag) teamLabel.appendChild(el("span", { style: { fontSize: "16px" }, text: flag }));
+    var flagInfo = flagFor(team);
+    if (flagInfo) {
+      if (flagInfo.type === "emoji") teamLabel.appendChild(el("span", { style: { fontSize: "16px" }, text: flagInfo.value }));
+      else teamLabel.appendChild(flagInfo.value);
+    }
     teamLabel.appendChild(document.createTextNode(team));
     row.appendChild(teamLabel);
     if (idx === 2) {
@@ -502,8 +546,11 @@ function renderTeamRow(name, ready, isWinner, isLoser, onClick) {
 
   var btn = el("button", { style: style, disabled: !ready, onClick: onClick });
   if (isWinner) btn.appendChild(el("span", { style: { color: "#4a9d6e", fontSize: "11px" }, text: "●" }));
-  var flag = flagFor(name);
-  if (flag) btn.appendChild(el("span", { style: { fontSize: "15px", flexShrink: "0" }, text: flag }));
+  var flagInfo = flagFor(name);
+  if (flagInfo) {
+    if (flagInfo.type === "emoji") btn.appendChild(el("span", { style: { fontSize: "15px", flexShrink: "0" }, text: flagInfo.value }));
+    else btn.appendChild(flagInfo.value);
+  }
   btn.appendChild(el("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, text: name }));
   return btn;
 }
